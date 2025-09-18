@@ -1,0 +1,20 @@
+---
+# tasks file for yugabyte-cluster
+
+- name: Setup Yugabyte User
+  import_tasks: setup_user.yml
+
+- name: System Configuration
+  import_tasks: system_config.yml
+
+- name: Install YugabyteDB
+  import_tasks: install_software.yml
+
+- name: Start Master Servers
+  import_tasks: start_masters.yml
+
+- name: Start TServer Nodes
+  import_tasks: start_tservers.yml
+
+- name: Verify Deployment
+  import_tasks: verify_deployment.yml

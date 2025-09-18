@@ -1,0 +1,5 @@
+- name: Start yb-master service
+  systemd:
+    name: yb-master
+    state: started
+    enabled: yes

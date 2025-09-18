@@ -1,0 +1,5 @@
+- name: Start yb-tserver service
+  systemd:
+    name: yb-tserver
+    state: started
+    enabled: yes

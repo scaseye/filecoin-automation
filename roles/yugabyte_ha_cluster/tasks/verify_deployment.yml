@@ -1,0 +1,51 @@
+- name: Wait for master UI to respond
+  uri:
+    url: "http://{{ inventory_hostname }}:7000"
+    return_content: yes
+    validate_certs: no
+  register: master_ui
+  retries: 10
+  delay: 5
+  until: master_ui.status == 200
+
+- name: Check master cluster status
+  command: >
+    /opt/yugabyte/current/bin/yb-admin
+    --master_addresses {{ groups['yugabyte_masters'] | join(':7100,') }}:7100
+    list_all_masters
+  register: master_check
+  changed_when: false
+  failed_when: master_check.rc != 0
+
+- name: Display master check output
+  debug:
+    msg: "{{ master_check.stdout }}"
+
+- name: Get Yugabyte table list
+  command: >
+    /opt/yugabyte/current/bin/yb-admin
+    --master_addresses {{ groups['yugabyte_masters'] | join(':7100,') }}:7100
+    list_tables
+  register: table_list
+  changed_when: false
+  failed_when: table_list.rc != 0
+
+- name: Extract first table name from table list
+  set_fact:
+    first_table: "{{ (table_list.stdout_lines | select('match', '^[^\\s]+\\s+[^\\s]+\\s+YQL_TABLE$') | list)[0].split()[1] }}"
+  when: table_list.stdout_lines | select('match', '^[^\\s]+\\s+[^\\s]+\\s+YQL_TABLE$') | list | length > 0
+
+- name: List tablets for first table
+  command: >
+    /opt/yugabyte/current/bin/yb-admin
+    --master_addresses {{ groups['yugabyte_masters'] | join(':7100,') }}:7100
+    list_tablets {{ first_table }}
+  register: tablet_list
+  changed_when: false
+  failed_when: tablet_list.rc != 0
+  when: first_table is defined
+
+- name: Display tablet list
+  debug:
+    msg: "{{ tablet_list.stdout_lines }}"
+  when: tablet_list is defined and 'stdout_lines' in tablet_list

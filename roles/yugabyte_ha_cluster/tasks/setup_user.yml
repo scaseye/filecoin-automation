@@ -1,0 +1,35 @@
+- name: Ensure yugabyte user exists
+  user:
+    name: yugabyte
+    shell: /bin/bash
+    home: /home/yugabyte
+    create_home: yes
+    state: present
+
+- name: Ensure .ssh directory exists for yugabyte user
+  file:
+    path: "/home/yugabyte/.ssh"
+    state: directory
+    owner: yugabyte
+    group: yugabyte
+    mode: '0700'
+
+- name: Generate SSH key for yugabyte user if it does not exist
+  become_user: yugabyte
+  command: ssh-keygen -t rsa -q -f /home/yugabyte/.ssh/id_rsa -N ""
+  args:
+    creates: /home/yugabyte/.ssh/id_rsa
+
+- name: Fetch public key from each node
+  slurp:
+    src: /home/yugabyte/.ssh/id_rsa.pub
+  register: public_keys
+
+- name: Add all public keys to authorized_keys for yugabyte user
+  become_user: yugabyte
+  lineinfile:
+    path: /home/yugabyte/.ssh/authorized_keys
+    line: "{{ hostvars[item].public_keys.content | b64decode }}"
+    create: yes
+    state: present
+  loop: "{{ groups['all'] }}"

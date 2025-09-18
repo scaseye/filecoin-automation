@@ -1,0 +1,22 @@
+- name: Set ulimits for yugabyte user
+  lineinfile:
+    path: /etc/security/limits.conf
+    line: "{{ item }}"
+    state: present
+  loop:
+    - "yugabyte soft nofile 1048576"
+    - "yugabyte hard nofile 1048576"
+    - "yugabyte soft nproc 65536"
+    - "yugabyte hard nproc 65536"
+
+- name: Set sysctl parameters
+  blockinfile:
+    path: /etc/sysctl.conf
+    block: |
+      fs.file-max = 1048576
+      vm.max_map_count = 1048576
+      vm.swappiness = 1
+    marker: "# {mark} Ansible managed block for YugabyteDB"
+
+- name: Apply sysctl changes
+  command: sysctl -p

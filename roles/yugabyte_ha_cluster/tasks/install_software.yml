@@ -1,0 +1,102 @@
+- name: Create Yugabyte install directory
+  file:
+    path: /opt/yugabyte
+    state: directory
+
+- name: Download Yugabyte tarball
+  get_url:
+    url: https://software.yugabyte.com/releases/2024.2.2.2/yugabyte-2024.2.2.2-b2-linux-x86_64.tar.gz
+    dest: /opt/yugabyte/yugabyte.tar.gz
+    mode: '0644'
+  become: true
+
+- name: Extract YugabyteDB tar if not already extracted
+  unarchive:
+    src: /opt/yugabyte/yugabyte.tar.gz
+    dest: /opt/yugabyte
+    remote_src: yes
+    creates: /opt/yugabyte/yugabyte-2024.2.2.2
+  become: true
+
+- name: Set symlink for yugabyte path
+  file:
+    src: /opt/yugabyte/yugabyte-2024.2.2.2
+    dest: /opt/yugabyte/current
+    state: link
+
+- name: Add Yugabyte bin to PATH (for yugabyte user)
+  lineinfile:
+    path: /home/yugabyte/.bashrc
+    line: 'export PATH=$PATH:/opt/yugabyte/current/bin'
+    create: yes
+    state: present
+    owner: yugabyte
+    group: yugabyte
+    mode: '0644'
+  become: true
+
+
+- name: Create /data directory for Yugabyte data
+  file:
+    path: /data
+    state: directory
+    owner: yugabyte
+    group: yugabyte
+    mode: '0755'
+
+- name: Create systemd service for yb-master
+  copy:
+    dest: /etc/systemd/system/yb-master.service
+    content: |
+      [Unit]
+      Description=Yugabyte Master Server
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=yugabyte
+      ExecStart=/opt/yugabyte/current/bin/yb-master \
+        --fs_data_dirs=/data/yb-master \
+        --master_addresses={{ master_addresses }} \
+        --rpc_bind_addresses={{ ansible_host }}:7100 \
+        --webserver_port=7000 \
+        --replication_factor=3
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Create systemd service for yb-tserver
+  copy:
+    dest: /etc/systemd/system/yb-tserver.service
+    content: |
+      [Unit]
+      Description=Yugabyte TServer
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=yugabyte
+      ExecStart=/opt/yugabyte/current/bin/yb-tserver \
+        --fs_data_dirs=/data/yb-tserver \
+        --tserver_master_addrs={{ master_addresses }} \
+        --rpc_bind_addresses={{ ansible_host }}:9100 \
+        --webserver_port=9000
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Add all Yugabyte hosts to /etc/hosts
+  become: yes
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ hostvars[item].ansible_host }} {{ item }}"
+    state: present
+  loop: "{{ groups['yugabyte_masters'] }}"
+  when: hostvars[item].ansible_host is defined
+
+
+- name: Reload systemd to recognize Yugabyte services
+  systemd:
+    daemon_reload: yes
